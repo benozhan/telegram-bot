@@ -204,7 +204,7 @@ def oranlari_cek():
 
         print("Lig deneniyor:", lig)
 
-        for market in ["h2h", "totals", "btts"]:
+        for market in ["h2h", "totals"]:
             data = api_get(
                 f"https://api.the-odds-api.com/v4/sports/{lig}/odds",
                 {
@@ -235,8 +235,7 @@ def oranlari_cek():
                         "dep": dep,
                         "bahis_sitesi": "Bilinmiyor",
                         "ms": {},
-                        "alt_ust": {},
-                        "kg": {}
+                        "alt_ust": {}
                     }
 
                 for bookmaker in event.get("bookmakers", []):
@@ -279,23 +278,9 @@ def oranlari_cek():
 
                                 maclar[mid]["bahis_sitesi"] = site
 
-                        elif mk.get("key") == "btts":
-                            for o in mk.get("outcomes", []):
-                                ad = str(o.get("name", "")).lower()
-                                fiyat = o.get("price")
-                                if fiyat is None:
-                                    continue
-
-                                if ad == "yes":
-                                    maclar[mid]["kg"]["var"] = float(fiyat)
-                                elif ad == "no":
-                                    maclar[mid]["kg"]["yok"] = float(fiyat)
-
-                                maclar[mid]["bahis_sitesi"] = site
-
     temiz = []
     for m in maclar.values():
-        if m["ms"] or m["alt_ust"] or m["kg"]:
+        if m["ms"] or m["alt_ust"]:
             temiz.append(m)
 
     print("Toplam maç:", len(temiz))
@@ -373,8 +358,7 @@ async def mesaj_yakala(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for m in maclar:
         butonlar = [[
             InlineKeyboardButton("🎯 Taraf", callback_data=f"taraf|{m['id']}"),
-            InlineKeyboardButton("📊 Alt / Üst", callback_data=f"altust|{m['id']}"),
-            InlineKeyboardButton("⚽ KG", callback_data=f"kg|{m['id']}")
+            InlineKeyboardButton("📊 Alt / Üst", callback_data=f"altust|{m['id']}")
         ]]
 
         await update.message.reply_text(
@@ -455,20 +439,6 @@ async def buton(update: Update, context: ContextTypes.DEFAULT_TYPE):
         })
 
         await q.message.reply_text(f"✅ Kupona eklendi:\n{mac_adi}\n{secim}: {oran}")
-
-    elif islem == "kg":
-        b = []
-
-        if "var" in mac["kg"]:
-            b.append(InlineKeyboardButton(f"Var ({mac['kg']['var']})", callback_data=f"sec|{mid}|KG Var|{mac['kg']['var']}"))
-        if "yok" in mac["kg"]:
-            b.append(InlineKeyboardButton(f"Yok ({mac['kg']['yok']})", callback_data=f"sec|{mid}|KG Yok|{mac['kg']['yok']}"))
-
-        if not b:
-            await q.message.reply_text("Bu maçta KG oranı yok.")
-            return
-
-        await q.message.reply_text("⚽ KG seç:", reply_markup=InlineKeyboardMarkup([b]))
 
     elif islem == "sec":
         secim = parca[2]

@@ -198,6 +198,58 @@ def apifootball_maclar_cek():
         except Exception as e:
             print("API-Football hata:", e)
 
+    # Hazırlık maçları (league 10)
+    for tarih in [bugun, yarin]:
+        try:
+            r = requests.get(
+                "https://v3.football.api-sports.io/fixtures",
+                headers={"x-apisports-key": APIFOOTBALL_KEY},
+                params={"league": 10, "date": tarih, "season": 2026},
+                timeout=25
+            )
+            data = r.json()
+            print(f"API-Football hazırlık {tarih}: {r.status_code}, kalan: {r.headers.get('x-ratelimit-requests-remaining')}")
+
+            for fix in data.get("response", []):
+                ev = fix["teams"]["home"]["name"]
+                dep = fix["teams"]["away"]["name"]
+                mid = mac_id_uret(ev, dep)
+
+                if mid not in maclar:
+                    maclar[mid] = {
+                        "id": mid,
+                        "ev": ev,
+                        "dep": dep,
+                        "tarih": tarih,
+                        "bahis_sitesi": "Bilinmiyor",
+                        "ms": {},
+                        "alt_ust": {}
+                    }
+        except Exception as e:
+            print("API-Football hazırlık hata:", e)
+
+    return maclar
+            data = r.json()
+            print(f"API-Football {tarih}: {r.status_code}, kalan: {r.headers.get('x-ratelimit-requests-remaining')}")
+
+            for fix in data.get("response", []):
+                ev = fix["teams"]["home"]["name"]
+                dep = fix["teams"]["away"]["name"]
+                mid = mac_id_uret(ev, dep)
+
+                if mid not in maclar:
+                    maclar[mid] = {
+                        "id": mid,
+                        "ev": ev,
+                        "dep": dep,
+                        "tarih": tarih,
+                        "bahis_sitesi": "Bilinmiyor",
+                        "ms": {},
+                        "alt_ust": {}
+                    }
+        except Exception as e:
+            print("API-Football hata:", e)
+
     return maclar
 
 

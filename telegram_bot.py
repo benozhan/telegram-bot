@@ -101,6 +101,9 @@ ARANACAK_CEVIRI = {
     "abd": "usa", "fildisi": "ivory", "fildişi": "ivory",
     "kadin": "women", "kadın": "women", "bayern munih": "bayern munich",
     "fenerbahce": "fenerbahce", "besiktas": "besiktas",
+    "fas": "morocco", "norvec": "norway", "norveç": "norway",
+    "hirvatistan": "croatia", "hırvatistan": "croatia",
+    "umman": "oman", "ekvador": "ecuador",
 }
 
 
@@ -129,9 +132,6 @@ def turkce_ad(ad):
 
     sonuc = sonuc.replace("Women", "Kadın")
     sonuc = sonuc.replace("W", "Kadın") if sonuc.endswith(" W") else sonuc
-    sonuc = sonuc.replace("U20", "U20")
-    sonuc = sonuc.replace("U21", "U21")
-    sonuc = sonuc.replace("U23", "U23")
 
     return sonuc
 
@@ -309,7 +309,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Sonra takım adı yaz: kanada, real madrid, galatasaray\n\n"
         "/kupon → kuponu gösterir\n"
         "/temizle → kuponu siler\n"
-        "/durum → veri durumunu gösterir"
+        "/durum → veri durumunu gösterir\n"
+        "/listele → tüm maçları listeler"
     )
 
 
@@ -319,7 +320,7 @@ async def guncelle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     maclar = oranlari_cek()
 
     if not maclar:
-        await update.message.reply_text("❌ Oran çekilemedi. CMD hata çıktısını gönder.")
+        await update.message.reply_text("❌ Oran çekilemedi.")
         return
 
     cache_kaydet(maclar)
@@ -346,6 +347,30 @@ async def durum(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def temizle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kullanici_kuponlari[update.message.chat_id] = []
     await update.message.reply_text("🗑️ Kupon temizlendi.")
+
+
+async def listele(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cache = cache_yukle()
+    if not cache:
+        await update.message.reply_text("Veri yok. Önce /guncelle yaz.")
+        return
+
+    maclar = cache["maclar"]
+    satirlar = []
+
+    for m in maclar:
+        satirlar.append(f"⚽ {turkce_ad(m['ev'])} - {turkce_ad(m['dep'])}")
+
+    parca1 = "\n".join(satirlar[:50])
+    await update.message.reply_text(f"📋 Toplam {len(maclar)} maç (ilk 50):\n\n{parca1}")
+
+    if len(satirlar) > 50:
+        parca2 = "\n".join(satirlar[50:100])
+        await update.message.reply_text(parca2)
+
+    if len(satirlar) > 100:
+        parca3 = "\n".join(satirlar[100:])
+        await update.message.reply_text(parca3)
 
 
 async def mesaj_yakala(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -412,7 +437,6 @@ async def buton(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif islem == "cizgi":
         p = parca[2]
-        oranlar = mac["alt_ust"].get(str(float(p)), {})
         b = [
             InlineKeyboardButton("Üst", callback_data=f"altustsec|{mid}|{p}|üst"),
             InlineKeyboardButton("Alt", callback_data=f"altustsec|{mid}|{p}|alt")
@@ -455,18 +479,18 @@ async def buton(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def kupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
-    kupon = kullanici_kuponlari.get(chat_id, [])
+    k = kullanici_kuponlari.get(chat_id, [])
 
-    if not kupon:
+    if not k:
         await update.message.reply_text("Kupon boş.")
         return
 
     toplam = 1
     mesaj = "📊 Kupon\n\n"
 
-    for k in kupon:
-        toplam *= k["oran"]
-        mesaj += f"⚽ {k['mac']}\n➡️ {k['secim']}: {k['oran']}\n\n"
+    for item in k:
+        toplam *= item["oran"]
+        mesaj += f"⚽ {item['mac']}\n➡️ {item['secim']}: {item['oran']}\n\n"
 
     mesaj += f"🎯 Toplam oran: {round(toplam, 2)}"
 
@@ -481,6 +505,7 @@ def main():
     app.add_handler(CommandHandler("durum", durum))
     app.add_handler(CommandHandler("temizle", temizle))
     app.add_handler(CommandHandler("kupon", kupon))
+    app.add_handler(CommandHandler("listele", listele))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mesaj_yakala))
     app.add_handler(CallbackQueryHandler(buton))

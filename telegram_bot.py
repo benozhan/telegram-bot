@@ -9,7 +9,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 BOT_TOKEN = "8821012001:AAGLE8O3SkY-1_vIKiDDiu23dLLUdGbz0ac"
-ODDS_API_KEY = "b8c77d4166c9bb4d23bd0e14b4904e83"
+ODDS_API_KEY = "ec259c88eb577bffc1e095d66c152830"
 APIFOOTBALL_KEY = "1e9d0e3b90a70db602a98f4c1090bce9"
 
 CACHE_FILE = "odds_cache.json"

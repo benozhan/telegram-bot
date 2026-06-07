@@ -194,7 +194,7 @@ def apifootball_maclar_cek():
             r = requests.get(
                 "https://v3.football.api-sports.io/fixtures",
                 headers={"x-apisports-key": APIFOOTBALL_KEY},
-                params={"league": 10, "date": tarih, "season": 2026},
+                params={"league": 10, "date": tarih, "season": 2025},
                 timeout=25
             )
             data = r.json()

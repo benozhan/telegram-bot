@@ -115,12 +115,10 @@ def temiz_yazi(yazi):
     yazi = str(yazi).lower().strip()
     yazi = unicodedata.normalize("NFKD", yazi)
     yazi = "".join(c for c in yazi if not unicodedata.combining(c))
-
     for tr, en in ARANACAK_CEVIRI.items():
         tr_norm = unicodedata.normalize("NFKD", tr)
         tr_norm = "".join(c for c in tr_norm if not unicodedata.combining(c))
         yazi = yazi.replace(tr_norm, en)
-
     yazi = re.sub(r"[^a-z0-9 ]", " ", yazi)
     return re.sub(r"\s+", " ", yazi).strip()
 
@@ -179,26 +177,18 @@ def apifootball_maclar_cek():
             )
             data = r.json()
             print(f"API-Football {tarih}: {r.status_code}, kalan: {r.headers.get('x-ratelimit-requests-remaining')}")
-
             for fix in data.get("response", []):
                 ev = fix["teams"]["home"]["name"]
                 dep = fix["teams"]["away"]["name"]
                 mid = mac_id_uret(ev, dep)
-
                 if mid not in maclar:
                     maclar[mid] = {
-                        "id": mid,
-                        "ev": ev,
-                        "dep": dep,
-                        "tarih": tarih,
-                        "bahis_sitesi": "Bilinmiyor",
-                        "ms": {},
-                        "alt_ust": {}
+                        "id": mid, "ev": ev, "dep": dep, "tarih": tarih,
+                        "bahis_sitesi": "Bilinmiyor", "ms": {}, "alt_ust": {}
                     }
         except Exception as e:
             print("API-Football hata:", e)
 
-    # Hazırlık maçları (league 10)
     for tarih in [bugun, yarin]:
         try:
             r = requests.get(
@@ -209,46 +199,17 @@ def apifootball_maclar_cek():
             )
             data = r.json()
             print(f"API-Football hazırlık {tarih}: {r.status_code}, kalan: {r.headers.get('x-ratelimit-requests-remaining')}")
-
             for fix in data.get("response", []):
                 ev = fix["teams"]["home"]["name"]
                 dep = fix["teams"]["away"]["name"]
                 mid = mac_id_uret(ev, dep)
-
                 if mid not in maclar:
                     maclar[mid] = {
-                        "id": mid,
-                        "ev": ev,
-                        "dep": dep,
-                        "tarih": tarih,
-                        "bahis_sitesi": "Bilinmiyor",
-                        "ms": {},
-                        "alt_ust": {}
+                        "id": mid, "ev": ev, "dep": dep, "tarih": tarih,
+                        "bahis_sitesi": "Bilinmiyor", "ms": {}, "alt_ust": {}
                     }
         except Exception as e:
             print("API-Football hazırlık hata:", e)
-
-    return maclar
-            data = r.json()
-            print(f"API-Football {tarih}: {r.status_code}, kalan: {r.headers.get('x-ratelimit-requests-remaining')}")
-
-            for fix in data.get("response", []):
-                ev = fix["teams"]["home"]["name"]
-                dep = fix["teams"]["away"]["name"]
-                mid = mac_id_uret(ev, dep)
-
-                if mid not in maclar:
-                    maclar[mid] = {
-                        "id": mid,
-                        "ev": ev,
-                        "dep": dep,
-                        "tarih": tarih,
-                        "bahis_sitesi": "Bilinmiyor",
-                        "ms": {},
-                        "alt_ust": {}
-                    }
-        except Exception as e:
-            print("API-Football hata:", e)
 
     return maclar
 
@@ -267,7 +228,6 @@ def odds_api_oranlar_ekle(maclar):
         lig = spor.get("key", "")
         if not spor.get("active") or not lig.startswith("soccer_"):
             continue
-
         for market in ["h2h", "totals"]:
             try:
                 r = requests.get(
@@ -281,30 +241,20 @@ def odds_api_oranlar_ekle(maclar):
                     timeout=25
                 )
                 print(f"Odds API {lig} {market}: {r.status_code}, kalan: {r.headers.get('x-requests-remaining')}")
-
                 if r.status_code != 200:
                     continue
-
                 data = r.json()
                 if isinstance(data, dict):
                     continue
-
                 for event in data:
                     ev = event.get("home_team")
                     dep = event.get("away_team")
                     mid = mac_id_uret(ev, dep)
-
                     if mid not in maclar:
                         maclar[mid] = {
-                            "id": mid,
-                            "ev": ev,
-                            "dep": dep,
-                            "tarih": "?",
-                            "bahis_sitesi": "Bilinmiyor",
-                            "ms": {},
-                            "alt_ust": {}
+                            "id": mid, "ev": ev, "dep": dep, "tarih": "?",
+                            "bahis_sitesi": "Bilinmiyor", "ms": {}, "alt_ust": {}
                         }
-
                     for bookmaker in event.get("bookmakers", []):
                         site = bookmaker.get("title", "Bilinmiyor")
                         for mk in bookmaker.get("markets", []):
@@ -321,7 +271,6 @@ def odds_api_oranlar_ekle(maclar):
                                     elif ad.lower() == "draw":
                                         maclar[mid]["ms"]["X"] = float(fiyat)
                                     maclar[mid]["bahis_sitesi"] = site
-
                             elif mk.get("key") == "totals":
                                 for o in mk.get("outcomes", []):
                                     ad = str(o.get("name", "")).lower()
@@ -346,11 +295,7 @@ def odds_api_oranlar_ekle(maclar):
 def oranlari_cek():
     maclar = apifootball_maclar_cek()
     maclar = odds_api_oranlar_ekle(maclar)
-
-    temiz = []
-    for m in maclar.values():
-        temiz.append(m)
-
+    temiz = list(maclar.values())
     print("Toplam maç:", len(temiz))
     return temiz
 
@@ -359,14 +304,11 @@ def mac_ara(sorgu):
     cache = cache_yukle()
     if not cache:
         return []
-
     q = temiz_yazi(sorgu)
     sonuc = []
-
     for m in cache["maclar"]:
         if q in temiz_yazi(m["ev"]) or q in temiz_yazi(m["dep"]):
             sonuc.append(m)
-
     return sonuc[:10]
 
 
@@ -385,11 +327,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def guncelle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📡 Oranlar çekiliyor...")
     maclar = oranlari_cek()
-
     if not maclar:
         await update.message.reply_text("❌ Oran çekilemedi.")
         return
-
     cache_kaydet(maclar)
     await update.message.reply_text(
         f"✅ Güncellendi.\nToplam maç: {len(maclar)}\nArtık kupon sorguları kredi harcamaz."
@@ -416,14 +356,9 @@ async def listele(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not cache:
         await update.message.reply_text("Veri yok. Önce /guncelle yaz.")
         return
-
     maclar = cache["maclar"]
-    satirlar = []
-    for m in maclar:
-        satirlar.append(f"⚽ {turkce_ad(m['ev'])} - {turkce_ad(m['dep'])}")
-
-    parca1 = "\n".join(satirlar[:50])
-    await update.message.reply_text(f"📋 Toplam {len(maclar)} maç (ilk 50):\n\n{parca1}")
+    satirlar = [f"⚽ {turkce_ad(m['ev'])} - {turkce_ad(m['dep'])}" for m in maclar]
+    await update.message.reply_text(f"📋 Toplam {len(maclar)} maç (ilk 50):\n\n" + "\n".join(satirlar[:50]))
     if len(satirlar) > 50:
         await update.message.reply_text("\n".join(satirlar[50:100]))
     if len(satirlar) > 100:
@@ -435,7 +370,6 @@ async def mesaj_yakala(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not maclar:
         await update.message.reply_text("❌ Maç bulunamadı.")
         return
-
     for m in maclar:
         butonlar = [[
             InlineKeyboardButton("🎯 Taraf", callback_data=f"taraf|{m['id']}"),
@@ -450,20 +384,16 @@ async def mesaj_yakala(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def buton(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
-
     parca = q.data.split("|")
     islem = parca[0]
     mid = parca[1]
-
     mac = mac_bul_id(mid)
     if not mac:
         await q.message.reply_text("❌ Maç verisi bulunamadı.")
         return
-
     chat_id = q.message.chat_id
     if chat_id not in kullanici_kuponlari:
         kullanici_kuponlari[chat_id] = []
-
     mac_adi = f"{turkce_ad(mac['ev'])} - {turkce_ad(mac['dep'])}"
 
     if islem == "taraf":
@@ -474,7 +404,6 @@ async def buton(update: Update, context: ContextTypes.DEFAULT_TYPE):
             b.append(InlineKeyboardButton(f"X ({mac['ms']['X']})", callback_data=f"sec|{mid}|MS X|{mac['ms']['X']}"))
         if "2" in mac["ms"]:
             b.append(InlineKeyboardButton(f"2 ({mac['ms']['2']})", callback_data=f"sec|{mid}|MS 2|{mac['ms']['2']}"))
-
         if not b:
             await q.message.reply_text("Bu maçta taraf oranı yok.")
             return
@@ -482,9 +411,7 @@ async def buton(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif islem == "altust":
         cizgiler = ["0.5", "1.5", "2.5", "3.5", "4.5", "5.5"]
-        satirlar = []
-        for c in cizgiler:
-            satirlar.append([InlineKeyboardButton(c, callback_data=f"cizgi|{mid}|{c}")])
+        satirlar = [[InlineKeyboardButton(c, callback_data=f"cizgi|{mid}|{c}")] for c in cizgiler]
         await q.message.reply_text("📊 Gol çizgisi seç:", reply_markup=InlineKeyboardMarkup(satirlar))
 
     elif islem == "cizgi":
@@ -499,11 +426,9 @@ async def buton(update: Update, context: ContextTypes.DEFAULT_TYPE):
         p = parca[2]
         secim_turu = parca[3]
         oranlar = mac["alt_ust"].get(str(float(p)), {})
-
         if secim_turu not in oranlar:
             await q.message.reply_text(f"❌ Bu maçta {p} {secim_turu} oranı yok.")
             return
-
         oran = oranlar[secim_turu]
         secim = f"{p} {secim_turu.capitalize()}"
         kullanici_kuponlari[chat_id].append({"mac": mac_adi, "secim": secim, "oran": oran})
@@ -519,11 +444,9 @@ async def buton(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def kupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     k = kullanici_kuponlari.get(chat_id, [])
-
     if not k:
         await update.message.reply_text("Kupon boş.")
         return
-
     toplam = 1
     mesaj = "📊 Kupon\n\n"
     for item in k:
@@ -542,17 +465,14 @@ async def post_init(application):
 
 def main():
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("guncelle", guncelle))
     app.add_handler(CommandHandler("durum", durum))
     app.add_handler(CommandHandler("temizle", temizle))
     app.add_handler(CommandHandler("kupon", kupon))
     app.add_handler(CommandHandler("listele", listele))
-
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mesaj_yakala))
     app.add_handler(CallbackQueryHandler(buton))
-
     print("Bot çalışıyor...")
     app.run_polling()
 

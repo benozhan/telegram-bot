@@ -497,9 +497,15 @@ async def kupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(mesaj)
 
 
-def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+async def post_init(application):
+    maclar = oranlari_cek()
+    if maclar:
+        cache_kaydet(maclar)
+        print(f"Başlangıçta {len(maclar)} maç yüklendi.")
 
+def main():
+    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("guncelle", guncelle))
     app.add_handler(CommandHandler("durum", durum))

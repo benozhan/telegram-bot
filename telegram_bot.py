@@ -4,12 +4,13 @@ import re
 import hashlib
 import unicodedata
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 BOT_TOKEN = "8821012001:AAGLE8O3SkY-1_vIKiDDiu23dLLUdGbz0ac"
 ODDS_API_KEY = "b8c77d4166c9bb4d23bd0e14b4904e83"
+APIFOOTBALL_KEY = "1e9d0e3b90a70db602a98f4c1090bce9"
 
 CACHE_FILE = "odds_cache.json"
 BOLGE = "eu"
@@ -103,7 +104,10 @@ ARANACAK_CEVIRI = {
     "fenerbahce": "fenerbahce", "besiktas": "besiktas",
     "fas": "morocco", "norvec": "norway", "norveç": "norway",
     "hirvatistan": "croatia", "hırvatistan": "croatia",
-    "umman": "oman", "ekvador": "ecuador",
+    "umman": "oman", "ekvador": "ecuador", "yunanistan": "greece",
+    "portekiz": "portugal", "belcika": "belgium", "belçika": "belgium",
+    "isviçre": "switzerland", "isveç": "sweden", "avustralya": "australia",
+    "avusturya": "austria", "japonya": "japan", "meksika": "mexico",
 }
 
 
@@ -123,45 +127,16 @@ def temiz_yazi(yazi):
 
 def turkce_ad(ad):
     sonuc = str(ad)
-
     for ing, tr in sorted(TAKIM_CEVIRI.items(), key=lambda x: len(x[0]), reverse=True):
         sonuc = sonuc.replace(ing, tr)
-
     for ing, tr in sorted(ULKE_CEVIRI.items(), key=lambda x: len(x[0]), reverse=True):
         sonuc = sonuc.replace(ing, tr)
-
     sonuc = sonuc.replace("Women", "Kadın")
-    sonuc = sonuc.replace("W", "Kadın") if sonuc.endswith(" W") else sonuc
-
     return sonuc
 
 
-def mac_id_uret(lig, ev, dep):
-    return hashlib.md5(f"{lig}|{ev}|{dep}".encode("utf-8")).hexdigest()[:12]
-
-
-def api_get(url, params):
-    try:
-        r = requests.get(url, params=params, timeout=25)
-        data = r.json()
-
-        print("API durum:", r.status_code)
-        print("Kullanılan:", r.headers.get("x-requests-used"))
-        print("Kalan:", r.headers.get("x-requests-remaining"))
-
-        if r.status_code != 200:
-            print("API atlandı:", data)
-            return None
-
-        if isinstance(data, dict):
-            print("API atlandı:", data)
-            return None
-
-        return data
-
-    except Exception as e:
-        print("API hata:", e)
-        return None
+def mac_id_uret(ev, dep):
+    return hashlib.md5(f"{ev}|{dep}".encode("utf-8")).hexdigest()[:12]
 
 
 def cache_yukle():
@@ -189,99 +164,140 @@ def mac_bul_id(mac_id):
     return None
 
 
-def oranlari_cek():
-    sporlar = api_get("https://api.the-odds-api.com/v4/sports", {"apiKey": ODDS_API_KEY})
-    if not sporlar:
-        return []
-
+def apifootball_maclar_cek():
+    bugun = datetime.now().strftime("%Y-%m-%d")
+    yarin = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     maclar = {}
 
-    for spor in sporlar:
-        lig = spor.get("key", "")
-
-        if not spor.get("active") or not lig.startswith("soccer_"):
-            continue
-
-        print("Lig deneniyor:", lig)
-
-        for market in ["h2h", "totals"]:
-            data = api_get(
-                f"https://api.the-odds-api.com/v4/sports/{lig}/odds",
-                {
-                    "apiKey": ODDS_API_KEY,
-                    "regions": BOLGE,
-                    "markets": market,
-                    "oddsFormat": "decimal"
-                }
+    for tarih in [bugun, yarin]:
+        try:
+            r = requests.get(
+                "https://v3.football.api-sports.io/fixtures",
+                headers={"x-apisports-key": APIFOOTBALL_KEY},
+                params={"date": tarih},
+                timeout=25
             )
+            data = r.json()
+            print(f"API-Football {tarih}: {r.status_code}, kalan: {r.headers.get('x-ratelimit-requests-remaining')}")
 
-            if not data:
-                continue
-
-            for event in data:
-                ev = event.get("home_team")
-                dep = event.get("away_team")
-
-                if not ev or not dep:
-                    continue
-
-                mid = mac_id_uret(lig, ev, dep)
+            for fix in data.get("response", []):
+                ev = fix["teams"]["home"]["name"]
+                dep = fix["teams"]["away"]["name"]
+                mid = mac_id_uret(ev, dep)
 
                 if mid not in maclar:
                     maclar[mid] = {
                         "id": mid,
-                        "lig": lig,
                         "ev": ev,
                         "dep": dep,
+                        "tarih": tarih,
                         "bahis_sitesi": "Bilinmiyor",
                         "ms": {},
                         "alt_ust": {}
                     }
+        except Exception as e:
+            print("API-Football hata:", e)
 
-                for bookmaker in event.get("bookmakers", []):
-                    site = bookmaker.get("title", "Bilinmiyor")
+    return maclar
 
-                    for mk in bookmaker.get("markets", []):
-                        if mk.get("key") == "h2h":
-                            for o in mk.get("outcomes", []):
-                                ad = str(o.get("name", ""))
-                                fiyat = o.get("price")
-                                if fiyat is None:
-                                    continue
 
-                                if ad == ev:
-                                    maclar[mid]["ms"]["1"] = float(fiyat)
-                                elif ad == dep:
-                                    maclar[mid]["ms"]["2"] = float(fiyat)
-                                elif ad.lower() == "draw":
-                                    maclar[mid]["ms"]["X"] = float(fiyat)
+def odds_api_oranlar_ekle(maclar):
+    try:
+        sporlar = requests.get(
+            "https://api.the-odds-api.com/v4/sports",
+            params={"apiKey": ODDS_API_KEY},
+            timeout=25
+        ).json()
+    except:
+        return maclar
 
-                                maclar[mid]["bahis_sitesi"] = site
+    for spor in sporlar:
+        lig = spor.get("key", "")
+        if not spor.get("active") or not lig.startswith("soccer_"):
+            continue
 
-                        elif mk.get("key") == "totals":
-                            for o in mk.get("outcomes", []):
-                                ad = str(o.get("name", "")).lower()
-                                puan = o.get("point")
-                                fiyat = o.get("price")
-                                if puan is None or fiyat is None:
-                                    continue
+        for market in ["h2h", "totals"]:
+            try:
+                r = requests.get(
+                    f"https://api.the-odds-api.com/v4/sports/{lig}/odds",
+                    params={
+                        "apiKey": ODDS_API_KEY,
+                        "regions": BOLGE,
+                        "markets": market,
+                        "oddsFormat": "decimal"
+                    },
+                    timeout=25
+                )
+                print(f"Odds API {lig} {market}: {r.status_code}, kalan: {r.headers.get('x-requests-remaining')}")
 
-                                puan = str(float(puan))
+                if r.status_code != 200:
+                    continue
 
-                                if puan not in maclar[mid]["alt_ust"]:
-                                    maclar[mid]["alt_ust"][puan] = {}
+                data = r.json()
+                if isinstance(data, dict):
+                    continue
 
-                                if ad == "over":
-                                    maclar[mid]["alt_ust"][puan]["üst"] = float(fiyat)
-                                elif ad == "under":
-                                    maclar[mid]["alt_ust"][puan]["alt"] = float(fiyat)
+                for event in data:
+                    ev = event.get("home_team")
+                    dep = event.get("away_team")
+                    mid = mac_id_uret(ev, dep)
 
-                                maclar[mid]["bahis_sitesi"] = site
+                    if mid not in maclar:
+                        maclar[mid] = {
+                            "id": mid,
+                            "ev": ev,
+                            "dep": dep,
+                            "tarih": "?",
+                            "bahis_sitesi": "Bilinmiyor",
+                            "ms": {},
+                            "alt_ust": {}
+                        }
+
+                    for bookmaker in event.get("bookmakers", []):
+                        site = bookmaker.get("title", "Bilinmiyor")
+                        for mk in bookmaker.get("markets", []):
+                            if mk.get("key") == "h2h":
+                                for o in mk.get("outcomes", []):
+                                    ad = str(o.get("name", ""))
+                                    fiyat = o.get("price")
+                                    if fiyat is None:
+                                        continue
+                                    if ad == ev:
+                                        maclar[mid]["ms"]["1"] = float(fiyat)
+                                    elif ad == dep:
+                                        maclar[mid]["ms"]["2"] = float(fiyat)
+                                    elif ad.lower() == "draw":
+                                        maclar[mid]["ms"]["X"] = float(fiyat)
+                                    maclar[mid]["bahis_sitesi"] = site
+
+                            elif mk.get("key") == "totals":
+                                for o in mk.get("outcomes", []):
+                                    ad = str(o.get("name", "")).lower()
+                                    puan = o.get("point")
+                                    fiyat = o.get("price")
+                                    if puan is None or fiyat is None:
+                                        continue
+                                    puan = str(float(puan))
+                                    if puan not in maclar[mid]["alt_ust"]:
+                                        maclar[mid]["alt_ust"][puan] = {}
+                                    if ad == "over":
+                                        maclar[mid]["alt_ust"][puan]["üst"] = float(fiyat)
+                                    elif ad == "under":
+                                        maclar[mid]["alt_ust"][puan]["alt"] = float(fiyat)
+                                    maclar[mid]["bahis_sitesi"] = site
+            except Exception as e:
+                print("Odds API hata:", e)
+
+    return maclar
+
+
+def oranlari_cek():
+    maclar = apifootball_maclar_cek()
+    maclar = odds_api_oranlar_ekle(maclar)
 
     temiz = []
     for m in maclar.values():
-        if m["ms"] or m["alt_ust"]:
-            temiz.append(m)
+        temiz.append(m)
 
     print("Toplam maç:", len(temiz))
     return temiz
@@ -316,7 +332,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def guncelle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📡 Oranlar çekiliyor...")
-
     maclar = oranlari_cek()
 
     if not maclar:
@@ -324,11 +339,8 @@ async def guncelle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     cache_kaydet(maclar)
-
     await update.message.reply_text(
-        f"✅ Güncellendi.\n"
-        f"Toplam maç: {len(maclar)}\n"
-        f"Artık kupon sorguları kredi harcamaz."
+        f"✅ Güncellendi.\nToplam maç: {len(maclar)}\nArtık kupon sorguları kredi harcamaz."
     )
 
 
@@ -337,10 +349,8 @@ async def durum(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not cache:
         await update.message.reply_text("Veri yok. Önce /guncelle yaz.")
         return
-
     await update.message.reply_text(
-        f"📁 Son güncelleme: {cache['zaman']}\n"
-        f"Maç sayısı: {len(cache['maclar'])}"
+        f"📁 Son güncelleme: {cache['zaman']}\nMaç sayısı: {len(cache['maclar'])}"
     )
 
 
@@ -357,25 +367,19 @@ async def listele(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     maclar = cache["maclar"]
     satirlar = []
-
     for m in maclar:
         satirlar.append(f"⚽ {turkce_ad(m['ev'])} - {turkce_ad(m['dep'])}")
 
     parca1 = "\n".join(satirlar[:50])
     await update.message.reply_text(f"📋 Toplam {len(maclar)} maç (ilk 50):\n\n{parca1}")
-
     if len(satirlar) > 50:
-        parca2 = "\n".join(satirlar[50:100])
-        await update.message.reply_text(parca2)
-
+        await update.message.reply_text("\n".join(satirlar[50:100]))
     if len(satirlar) > 100:
-        parca3 = "\n".join(satirlar[100:])
-        await update.message.reply_text(parca3)
+        await update.message.reply_text("\n".join(satirlar[100:]))
 
 
 async def mesaj_yakala(update: Update, context: ContextTypes.DEFAULT_TYPE):
     maclar = mac_ara(update.message.text)
-
     if not maclar:
         await update.message.reply_text("❌ Maç bulunamadı.")
         return
@@ -385,7 +389,6 @@ async def mesaj_yakala(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🎯 Taraf", callback_data=f"taraf|{m['id']}"),
             InlineKeyboardButton("📊 Alt / Üst", callback_data=f"altust|{m['id']}")
         ]]
-
         await update.message.reply_text(
             f"⚽ {turkce_ad(m['ev'])} - {turkce_ad(m['dep'])}\n🏦 {m['bahis_sitesi']}",
             reply_markup=InlineKeyboardMarkup(butonlar)
@@ -423,16 +426,13 @@ async def buton(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not b:
             await q.message.reply_text("Bu maçta taraf oranı yok.")
             return
-
         await q.message.reply_text("🎯 Taraf seç:", reply_markup=InlineKeyboardMarkup([b]))
 
     elif islem == "altust":
         cizgiler = ["0.5", "1.5", "2.5", "3.5", "4.5", "5.5"]
         satirlar = []
-
         for c in cizgiler:
             satirlar.append([InlineKeyboardButton(c, callback_data=f"cizgi|{mid}|{c}")])
-
         await q.message.reply_text("📊 Gol çizgisi seç:", reply_markup=InlineKeyboardMarkup(satirlar))
 
     elif islem == "cizgi":
@@ -441,7 +441,6 @@ async def buton(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("Üst", callback_data=f"altustsec|{mid}|{p}|üst"),
             InlineKeyboardButton("Alt", callback_data=f"altustsec|{mid}|{p}|alt")
         ]
-
         await q.message.reply_text(f"📊 {p} için seçim yap:", reply_markup=InlineKeyboardMarkup([b]))
 
     elif islem == "altustsec":
@@ -455,25 +454,13 @@ async def buton(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         oran = oranlar[secim_turu]
         secim = f"{p} {secim_turu.capitalize()}"
-
-        kullanici_kuponlari[chat_id].append({
-            "mac": mac_adi,
-            "secim": secim,
-            "oran": oran
-        })
-
+        kullanici_kuponlari[chat_id].append({"mac": mac_adi, "secim": secim, "oran": oran})
         await q.message.reply_text(f"✅ Kupona eklendi:\n{mac_adi}\n{secim}: {oran}")
 
     elif islem == "sec":
         secim = parca[2]
         oran = float(parca[3])
-
-        kullanici_kuponlari[chat_id].append({
-            "mac": mac_adi,
-            "secim": secim,
-            "oran": oran
-        })
-
+        kullanici_kuponlari[chat_id].append({"mac": mac_adi, "secim": secim, "oran": oran})
         await q.message.reply_text(f"✅ Kupona eklendi:\n{mac_adi}\n{secim}: {oran}")
 
 
@@ -487,13 +474,10 @@ async def kupon(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     toplam = 1
     mesaj = "📊 Kupon\n\n"
-
     for item in k:
         toplam *= item["oran"]
         mesaj += f"⚽ {item['mac']}\n➡️ {item['secim']}: {item['oran']}\n\n"
-
     mesaj += f"🎯 Toplam oran: {round(toplam, 2)}"
-
     await update.message.reply_text(mesaj)
 
 
@@ -503,9 +487,10 @@ async def post_init(application):
         cache_kaydet(maclar)
         print(f"Başlangıçta {len(maclar)} maç yüklendi.")
 
+
 def main():
     app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
-    
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("guncelle", guncelle))
     app.add_handler(CommandHandler("durum", durum))

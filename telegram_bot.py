@@ -20,7 +20,10 @@ TARGET_CHANNEL = "@holiganozel"
 WS_URL = "wss://sportsapi.holiganbet7602.com/v2"
 HEADERS = {
     "Origin": "https://sports2.holiganbet7602.com",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
 }
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s")
@@ -85,7 +88,12 @@ async def holigan_ws(tg):
     while True:
         try:
             log.info(f"Bağlanıyor: {WS_URL}")
-            async with websockets.connect(WS_URL, additional_headers=HEADERS, ping_interval=30) as ws:
+            async with websockets.connect(
+                WS_URL,
+                additional_headers=HEADERS,
+                subprotocols=["wamp.2.json"],
+                ping_interval=30,
+            ) as ws:
                 log.info("Bağlandı!")
                 await ws.send(json.dumps([1, "www.holiganbet.com", {"agent": "Wampy.js v6.2.2", "roles": {"publisher": {"features": {}}}}]))
                 await asyncio.sleep(1)

@@ -1,2 +1,2 @@
-python-telegram-bot
-requests
+telethon==1.36.0
+cryptg

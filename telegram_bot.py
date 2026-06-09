@@ -17,7 +17,7 @@ API_HASH = "06c5990bd3e612ca40f0b308b3b4e975"
 SESSION  = os.environ.get("SESSION_STRING", "")
 TARGET_CHANNEL = "@holiganozel"
 
-WS_URL = "wss://sportsapi.holiganbet7602.com/v2"
+WS_URL = "wss://api.holiganbet7602.com/v2"
 HEADERS = {
     "Origin": "https://sports2.holiganbet7602.com",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
